@@ -1,4 +1,5 @@
 import os
+import re
 import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -8,9 +9,9 @@ from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "8701869062:AAFTGGGkI-pg2ZyWkq9e7mRhvR5Q9jGDwuk"
-API_ID = "37133457"        # Your bot's API ID
-API_HASH = "951a895d6016c9d88880f9591209dbc2"    # Your bot's API Hash
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+API_ID = "YOUR_API_ID"        # Kept as string or int
+API_HASH = "YOUR_API_HASH"
 
 bot = Client("SessionGeneratorBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
@@ -32,27 +33,18 @@ async def generate_session(client, callback_query):
     chat = callback_query.message.chat
     
     await callback_query.answer()
-    await bot.send_message(chat.id, f"**Starting {lib_type.capitalize()} Session Generation...**\n\nSend your `API_ID`:")
     
     try:
-        # 1. Get API ID
-        api_id_msg = await bot.listen(chat.id, timeout=300)
-        user_api_id = int(api_id_msg.text)
-        
-        # 2. Get API HASH
-        await bot.send_message(chat.id, "Send your `API_HASH`:")
-        api_hash_msg = await bot.listen(chat.id, timeout=300)
-        user_api_hash = api_hash_msg.text
-        
-        # 3. Get Phone Number
-        await bot.send_message(chat.id, "Send your Phone Number with country code (e.g., +91...):")
+        # 1. Ask for Phone Number directly (skips API ID/Hash)
+        await bot.send_message(chat.id, f"**Starting {lib_type.capitalize()} Session Generation...**\n\nSend your Phone Number with country code (e.g., +91...):")
         phone_msg = await bot.listen(chat.id, timeout=300)
         phone_number = phone_msg.text.replace(" ", "")
 
+        # Pass the global API_ID and API_HASH automatically
         if lib_type == "pyrogram":
-            await generate_pyrogram(chat.id, user_api_id, user_api_hash, phone_number)
+            await generate_pyrogram(chat.id, API_ID, API_HASH, phone_number)
         else:
-            await generate_telethon(chat.id, user_api_id, user_api_hash, phone_number)
+            await generate_telethon(chat.id, API_ID, API_HASH, phone_number)
             
     except asyncio.TimeoutError:
         await bot.send_message(chat.id, "Time limit exceeded. Send /start again.")
@@ -65,10 +57,11 @@ async def generate_pyrogram(chat_id, api_id, api_hash, phone_number):
     
     try:
         code_info = await user_client.send_code(phone_number)
-        await bot.send_message(chat_id, "Code sent! Send the OTP in format `1 2 3 4 5` (with spaces):")
+        await bot.send_message(chat_id, "Code sent! Send the OTP.\n\n*(Note: If Telegram deletes your code, send it with spaces like `1 2 3 4 5`)*")
         
         otp_msg = await bot.listen(chat_id, timeout=300)
-        otp = otp_msg.text.replace(" ", "")
+        # Fixes space/no-space OTP by extracting only the numbers
+        otp = re.sub(r'\D', '', otp_msg.text)
         
         try:
             await user_client.sign_in(phone_number, code_info.phone_code_hash, otp)
@@ -94,10 +87,11 @@ async def generate_telethon(chat_id, api_id, api_hash, phone_number):
     
     try:
         code_info = await client.send_code_request(phone_number)
-        await bot.send_message(chat_id, "Code sent! Send the OTP in format `1 2 3 4 5` (with spaces):")
+        await bot.send_message(chat_id, "Code sent! Send the OTP.\n\n*(Note: If Telegram deletes your code, send it with spaces like `1 2 3 4 5`)*")
         
         otp_msg = await bot.listen(chat_id, timeout=300)
-        otp = otp_msg.text.replace(" ", "")
+        # Fixes space/no-space OTP by extracting only the numbers
+        otp = re.sub(r'\D', '', otp_msg.text)
         
         try:
             await client.sign_in(phone_number, code_info.phone_code_hash, otp)
@@ -108,7 +102,6 @@ async def generate_telethon(chat_id, api_id, api_hash, phone_number):
             
         session_string = client.session.save()
         
-        # We need a pyrogram wrapper to send messages to saved messages easily
         temp_pyro = Client(":memory:", api_id=api_id, api_hash=api_hash, session_string=session_string)
         await temp_pyro.connect()
         await send_session(chat_id, session_string, "Telethon", temp_pyro)
