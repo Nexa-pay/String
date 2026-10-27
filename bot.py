@@ -8,7 +8,7 @@ from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
 
 # --- CONFIGURATION ---
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = "8701869062:AAFTGGGkI-pg2ZyWkq9e7mRhvR5Q9jGDwuk"
 API_ID = "37133457"        # Your bot's API ID
 API_HASH = "951a895d6016c9d88880f9591209dbc2"    # Your bot's API Hash
 
