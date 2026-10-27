@@ -10,8 +10,8 @@ from telethon.errors import SessionPasswordNeededError
 
 # --- CONFIGURATION ---
 BOT_TOKEN = "8701869062:AAFTGGGkI-pg2ZyWkq9e7mRhvR5Q9jGDwuk"
-API_ID = "YOUR_API_ID"        # Kept as string or int
-API_HASH = "YOUR_API_HASH"
+API_ID = "37133457"        # Kept as string or int
+API_HASH = "951a895d6016c9d88880f9591209dbc2"
 
 bot = Client("SessionGeneratorBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
